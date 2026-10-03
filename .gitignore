@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.cache/
+.DS_Store
+data/raw/*.xls
+data/processed/
+figures/
