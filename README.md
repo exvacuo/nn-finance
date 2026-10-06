@@ -6,12 +6,18 @@ The original workbook is [M3C.xls](https://forecasters.org/data/m3comp/M3C.xls).
 
 ## Run
 
+Build the environment from a Python 3.12 interpreter — the default `python3` on some
+machines is a bare 3.14 without pandas, and the imports below will fail there.
+
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 python3 load_data.py
 python3 plot_data.py
+python3 series_data.py          # window counts for the current settings
+python3 models.py               # train the forecaster, score the holdout
+python3 checks.py               # verify the pipeline end to end (~10 s)
 ```
 
 The default input, `data/raw/m3_monthly.csv`, is an unmodified CSV export of the
@@ -42,8 +48,56 @@ data = load_monthly_finance()
 series = data[data.series_id == "N2522"]
 train = series.loc[series.split == "train", "value"].to_numpy()
 test = series.loc[series.split == "test", "value"].to_numpy()
-# TODO: build lag windows, fit your model on train, and evaluate on test.
 ```
+
+## Forecasting
+
+`series_data.py` turns the series into pooled lag windows and `models.py` fits one
+network across all of them. A single global model is used because no individual
+series has enough history to train on: training lengths run from 50 to 126 months,
+but pooling gives 9,483 windows at a window size of 24.
+
+Series scales are unrelated — values span 10 to 27,505 — so normalisation is fitted
+**per window** rather than per series. Each window is centred on its own mean and
+divided by its own standard deviation, and the same constants are applied to its
+target block and reversed on the forecast. The network therefore only ever learns
+the shape of a continuation, never an absolute level, which is what lets one model
+serve all 145 series. The constants stay fixed across the whole 18-month forecast,
+so a recursive model can later feed predictions back without changing reference
+frame. `last`, `loglast` and `series_z` are also implemented, for comparison.
+
+```python
+from series_data import load_series_set, make_direct_windows, make_forecast_inputs
+from models import DirectMLP, TrainConfig, fit, predict, resolve_device, smape
+
+data = load_series_set()
+origins = data.full_origins()                      # forecast from the end of training
+device = resolve_device("cpu")                     # faster than MPS at this model size
+
+fit_batch, val_batch = make_direct_windows(data, window=24, origins=origins)
+result = fit(DirectMLP(window=24, hidden=(64, 64)), fit_batch, val_batch,
+             TrainConfig(seed=0), device)
+
+x, scaler, index = make_forecast_inputs(data, window=24, origins=origins)
+forecast = predict(result.model, x, scaler, device)          # (n_series, 18)
+print(smape(data.test[index], forecast).mean())
+```
+
+The early-stopping split is chronological, not random: neighbouring windows share
+all but one observation, so a random split would place near-duplicates on both
+sides and early stopping would never fire. `result.history` holds the per-epoch
+train and validation losses.
+
+Measured holdout sMAPE over 3 seeds, window 24, hidden (64, 64): **mean 14.41,
+median 7.78**, against a last-value baseline of 15.96 / 10.26. A model with no
+hidden layer — i.e. linear autoregression — scores 14.14 / 7.23, so depth buys
+little here; this matches the M3 competition's own finding that simple methods are
+hard to beat.
+
+`checks.py` verifies the pipeline: window counts, normalisation round-trips, that
+windows reconstruct their raw slices, that no training window can reach the test
+block, that the network can overfit a small batch, that the zero-hidden-layer model
+agrees with least squares, and that a seed reproduces its run exactly.
 
 The workbook's `N` is the total series length, including the `NF=18` test
 observations. The loader assigns the first `N - NF` months to training and the
