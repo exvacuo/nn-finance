@@ -4,4 +4,5 @@ __pycache__/
 .DS_Store
 data/raw/*.xls
 data/processed/
+data/predictions/
 figures/

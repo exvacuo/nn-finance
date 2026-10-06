@@ -1,115 +1,113 @@
 # M3 monthly financial forecasting
 
-Starter scripts for the **145 monthly FINANCE series** in the M3 competition.
-Source: [International Institute of Forecasters — M3 competition](https://forecasters.org/resources/time-series-data/m3-competition/).
-The original workbook is [M3C.xls](https://forecasters.org/data/m3comp/M3C.xls).
+Prepare the 145 monthly FINANCE series from the M3 competition, then train a
+shared MLP to predict one next-month value from a window of past observations.
 
 ## Run
 
-Build the environment from a Python 3.12 interpreter — the default `python3` on some
-machines is a bare 3.14 without pandas, and the imports below will fail there.
+Use Python 3.11 or newer with the dependencies in `requirements.txt`.
+The local `.venv` uses Python 3.11 and PyTorch 2.10:
 
 ```sh
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-python3 load_data.py
-python3 plot_data.py
-python3 series_data.py          # window counts for the current settings
-python3 models.py               # train the forecaster, score the holdout
-python3 checks.py               # verify the pipeline end to end (~10 s)
+python -m pip install -r requirements.txt
+python -m utilities.load_data
+python -m utilities.plot_data
+python -m models.mlp
 ```
 
-The default input, `data/raw/m3_monthly.csv`, is an unmodified CSV export of the
-`M3Month` sheet in your local `M3C.xls`. It contains all 1,428 monthly series;
-the loader filters to FINANCE. This snapshot lets you run without downloading
-the workbook. Original series IDs such as `N2522` are preserved.
+The loader reads `data/raw/m3_monthly.csv`, an unmodified export of the `M3Month`
+sheet of M3C.xls. It filters FINANCE and writes
+`data/processed/monthly_finance.csv` with columns `series_id`, `date`,
+`month_index`, `value`, `split`, and `category`. Original IDs and month-start dates
+are preserved. The workbook's `N` includes its `NF=18` test observations; only the
+first `N - NF` observations are training data.
 
-You can also load the original workbook directly (requires `xlrd`):
+To prepare the workbook directly or select series to plot:
 
 ```sh
-python3 load_data.py --input /Users/marcos/Downloads/M3C.xls
-python3 plot_data.py --series N2522 N2523 --show
-python3 plot_data.py --series N2522 --output figures/N2522.pdf
+python -m utilities.load_data --input /path/to/M3C.xls
+python -m utilities.plot_data --series N2522 N2523 --show
 ```
 
-`load_data.py` writes `data/processed/monthly_finance.csv`, with columns
-`series_id`, `date`, `month_index`, `value`, `split`, and `category`.
-`plot_data.py` saves `figures/monthly_finance.png` by default, showing three
-series on separate axes. Training observations are blue; test actuals are orange.
-Use `--count 6` to plot more series, or `--series` to choose specific IDs.
+## MLP
 
-## Use in Python
+`models/mlp.py` reads training observations from the **processed CSV**. It contains
+data formatting, the one-step network, hyperparameter search, and forecast export.
+Each example uses `n` consecutive observations from one series to predict its next
+value. Examples never cross series boundaries. Each window and its target share
+normalisation constants computed solely from that input window.
+
+Hyperparameters are selected using expanding chronological folds. Defaults are
+three forecast origins, six months apart, and seeds 0, 1, and 2. Each fold trains
+on observations before its origin, then predicts the next 18 values recursively.
+The validation blocks overlap, so scores across folds are correlated. All
+candidates see the same series and forecast origins.
+
+For a series with L training observations, default origins are L-30, L-24, and
+L-18. The competition holdout is excluded from all folds. A previous fold's
+validation observations can become observed history in a later fold, but each
+fold's model is initialised and fitted from scratch.
+
+The default window grid uses multiples of 6 up to the largest size that leaves at
+least one fitting example in the earliest fold of every series. For this dataset
+that is **6, 12, and 18**. The grid also searches hidden layers `(32,)`, `(64,)`,
+and `(64, 64)`, with learning rates 0.0003 and 0.001: 18 configurations and 162
+training runs across folds and seeds.
+
+Training gradients use one-step normalised MSE. **Both checkpoint selection and
+hyperparameter ranking use recursive 18-step sMAPE on the original scale.**
+Early stopping returns each run's best recursive validation checkpoint. Candidate
+scores average these best scores across folds and seeds; reported standard
+deviations describe variation across those runs, not confidence intervals. These
+are model-selection scores, not an independent estimate of final performance.
+
+The winning configuration is retrained from fresh weights on all non-holdout
+observations for the median selected epoch count across its CV runs. The final
+seed is fixed in advance (default 0), not selected using validation scores.
+
+During forecasting, each updated input window is normalised again. The predicted
+value is converted back to the original scale, appended to the window, and used
+for the next step. Validation and final prediction use this same procedure and
+never feed in actual future values.
+
+The command saves 18 predictions per series to `data/predictions/mlp.csv`.
+Columns are `series_id`, `step` (1–18), `month_index`, `date`, and `prediction`.
+Join this file to processed test observations on `series_id` and `month_index`
+for later evaluation. The MLP script calculates no holdout scores.
+
+```sh
+python -m models.mlp --search-results search.csv --history loss.csv
+python -m models.mlp --windows 6 12 18 --folds 3 --fold-step 6 --seeds 0 1 2
+python -m models.mlp --folds 1 --windows 6 12 18 24 30
+```
+
+Use `--predictions` to choose the forecast CSV destination. `--search-results`
+saves one row per configuration with mean CV score, standard deviation, median
+epoch count, and run count. `--history` saves the winning configuration's epoch
+curves, identified by fold and seed. `--seed` sets the final retraining seed;
+`--seeds` sets the CV seeds. Larger explicit windows are rejected if any series
+cannot provide a fitting example in the earliest fold.
+
+For use in Python:
 
 ```python
-from load_data import load_monthly_finance
+from models.mlp import load_data, prepare_windows, train_mlp, search_hyperparameters, predict
 
-data = load_monthly_finance()
-series = data[data.series_id == "N2522"]
-train = series.loc[series.split == "train", "value"].to_numpy()
-test = series.loc[series.split == "test", "value"].to_numpy()
+series = load_data()
+best, results, losses = search_hyperparameters(series)
+histories = list(series.values())
+arrays = prepare_windows(histories, window=best["window"])
+model, _ = train_mlp(arrays, window=best["window"], epochs=best["best_epoch"],
+                     hidden=best["hidden"], lr=best["lr"], seed=0)
+forecast = predict(model, histories, steps=18)  # rows follow series.keys()
 ```
 
-## Forecasting
+Keep the competition test set for final evaluation and tune using chronological
+validation within training data. Values remain on the historical competition
+scale; these are benchmark series rather than current market feeds.
 
-`series_data.py` turns the series into pooled lag windows and `models.py` fits one
-network across all of them. A single global model is used because no individual
-series has enough history to train on: training lengths run from 50 to 126 months,
-but pooling gives 9,483 windows at a window size of 24.
-
-Series scales are unrelated — values span 10 to 27,505 — so normalisation is fitted
-**per window** rather than per series. Each window is centred on its own mean and
-divided by its own standard deviation, and the same constants are applied to its
-target block and reversed on the forecast. The network therefore only ever learns
-the shape of a continuation, never an absolute level, which is what lets one model
-serve all 145 series. The constants stay fixed across the whole 18-month forecast,
-so a recursive model can later feed predictions back without changing reference
-frame. `last`, `loglast` and `series_z` are also implemented, for comparison.
-
-```python
-from series_data import load_series_set, make_direct_windows, make_forecast_inputs
-from models import DirectMLP, TrainConfig, fit, predict, resolve_device, smape
-
-data = load_series_set()
-origins = data.full_origins()                      # forecast from the end of training
-device = resolve_device("cpu")                     # faster than MPS at this model size
-
-fit_batch, val_batch = make_direct_windows(data, window=24, origins=origins)
-result = fit(DirectMLP(window=24, hidden=(64, 64)), fit_batch, val_batch,
-             TrainConfig(seed=0), device)
-
-x, scaler, index = make_forecast_inputs(data, window=24, origins=origins)
-forecast = predict(result.model, x, scaler, device)          # (n_series, 18)
-print(smape(data.test[index], forecast).mean())
-```
-
-The early-stopping split is chronological, not random: neighbouring windows share
-all but one observation, so a random split would place near-duplicates on both
-sides and early stopping would never fire. `result.history` holds the per-epoch
-train and validation losses.
-
-Measured holdout sMAPE over 3 seeds, window 24, hidden (64, 64): **mean 14.41,
-median 7.78**, against a last-value baseline of 15.96 / 10.26. A model with no
-hidden layer — i.e. linear autoregression — scores 14.14 / 7.23, so depth buys
-little here; this matches the M3 competition's own finding that simple methods are
-hard to beat.
-
-`checks.py` verifies the pipeline: window counts, normalisation round-trips, that
-windows reconstruct their raw slices, that no training window can reach the test
-block, that the network can overfit a small batch, that the zero-hidden-layer model
-agrees with least squares, and that a seed reproduces its run exactly.
-
-The workbook's `N` is the total series length, including the `NF=18` test
-observations. The loader assigns the first `N - NF` months to training and the
-last 18 to testing. Dates use the workbook's starting year/month and are represented
-as month-start timestamps. Trailing spreadsheet padding is ignored; missing
-observations inside a series cause an error instead of shifting the timeline.
-
-Keep the competition test set for final evaluation. For model tuning, split off
-validation months chronologically from training. Fit scaling and other learned
-preprocessing only on the training portion. Values are kept on the supplied
-competition scale; these are historical benchmark series, not current market feeds.
-
-Dataset reference: Makridakis, S. and Hibon, M. (2000). *The M3-Competition:
-results, conclusions and implications*. International Journal of Forecasting,
-16(4), 451–476. [doi:10.1016/S0169-2070(00)00057-1](https://doi.org/10.1016/S0169-2070(00)00057-1).
+Dataset: Makridakis, S. and Hibon, M. (2000). The M3-Competition: results,
+conclusions and implications. International Journal of Forecasting, 16(4), 451–476.
+[DOI](https://doi.org/10.1016/S0169-2070(00)00057-1).

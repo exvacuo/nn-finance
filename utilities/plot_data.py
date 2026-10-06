@@ -4,7 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
-from load_data import DEFAULT_OUTPUT, ROOT
+from utilities.load_data import DEFAULT_OUTPUT, ROOT
 
 # Keep Matplotlib's cache inside the project, including on restricted machines.
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".cache" / "matplotlib"))
@@ -51,7 +51,7 @@ def main() -> None:
     if args.count < 1:
         parser.error("--count must be at least 1.")
     if not args.input.expanduser().is_file():
-        parser.error("Processed data not found. Run python3 load_data.py first.")
+        parser.error("Processed data not found. Run python3 -m utilities.load_data first.")
 
     data = pd.read_csv(args.input.expanduser(), parse_dates=["date"])
     available = data["series_id"].unique().tolist()

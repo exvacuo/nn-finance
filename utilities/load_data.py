@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = ROOT / "data" / "raw" / "m3_monthly.csv"
 DEFAULT_OUTPUT = ROOT / "data" / "processed" / "monthly_finance.csv"
 METADATA_COLUMNS = [
