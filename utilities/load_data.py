@@ -9,6 +9,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = ROOT / "data" / "raw" / "m3_monthly.csv"
 DEFAULT_OUTPUT = ROOT / "data" / "processed" / "monthly_finance.csv"
+HORIZON = 18    # months withheld by the competition (NF)
 METADATA_COLUMNS = [
     "Series", "N", "NF", "Category", "Starting Year", "Starting Month"
 ]
@@ -38,8 +39,8 @@ def prepare_monthly_finance(sheet: pd.DataFrame) -> pd.DataFrame:
     for _, row in finance.iterrows():
         series_id = str(row["Series"]).strip()
         n, horizon = int(row["N"]), int(row["NF"])
-        if horizon != 18 or n <= horizon:
-            raise ValueError(f"{series_id}: expected 18 test months and training data.")
+        if horizon != HORIZON or n <= horizon:
+            raise ValueError(f"{series_id}: expected {HORIZON} test months and training data.")
         value_columns = [str(month) for month in range(1, n + 1)]
         if not set(value_columns).issubset(sheet.columns):
             raise ValueError(f"{series_id}: missing observation columns.")
@@ -82,6 +83,14 @@ def load_monthly_finance(path: str | Path = DEFAULT_INPUT) -> pd.DataFrame:
     else:
         raise ValueError("Input must be M3C.xls or a CSV export of M3Month.")
     return prepare_monthly_finance(sheet)
+
+
+def load_training_data(path: str | Path = DEFAULT_OUTPUT) -> dict[str, np.ndarray]:
+    """Read only training observations from the prepared CSV, one array per series."""
+    data = pd.read_csv(Path(path).expanduser())
+    data = data.loc[data["split"].eq("train")].sort_values("month_index")
+    return {key: rows["value"].to_numpy(dtype=float)
+            for key, rows in data.groupby("series_id", sort=False)}
 
 
 def main() -> None:

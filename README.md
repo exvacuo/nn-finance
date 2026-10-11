@@ -1,21 +1,35 @@
 # M3 monthly financial forecasting
 
-Prepare the 145 monthly FINANCE series from the M3 competition, then train a
-shared MLP to predict one next-month value from a window of past observations.
+Prepare the 145 monthly FINANCE series from the M3 competition, remove seasonality
+and trend, and forecast the 18 withheld months with a ridge regression baseline and
+a small MLP.
 
 ## Run
 
-Use Python 3.11 or newer with the dependencies in `requirements.txt`.
-The local `.venv` uses Python 3.11 and PyTorch 2.10:
+Use Python 3.11 or newer with the dependencies in `requirements.txt`:
 
 ```sh
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m utilities.load_data
 python -m utilities.plot_data
+python -m models.ridge
 python -m models.mlp
 ```
+
+## Layout
+
+| File | Role |
+| --- | --- |
+| `utilities/load_data.py` | Raw M3 sheet → processed CSV; `load_training_data` reads the training histories |
+| `utilities/plot_data.py` | Plot series with the withheld test months highlighted |
+| `models/preprocessing.py` | Classical decomposition: seasonality → linear trend → per-series z-score |
+| `models/evaluation.py` | Validation folds, sMAPE (overall and per forecast step), forecast export |
+| `models/ridge.py` | Ridge regression baseline |
+| `models/mlp.py` | One-hidden-layer MLP |
+
+## Data
 
 The loader reads `data/raw/m3_monthly.csv`, an unmodified export of the `M3Month`
 sheet of M3C.xls. It filters FINANCE and writes
@@ -31,82 +45,76 @@ python -m utilities.load_data --input /path/to/M3C.xls
 python -m utilities.plot_data --series N2522 N2523 --show
 ```
 
-## MLP
+## Preprocessing
 
-`models/mlp.py` reads training observations from the **processed CSV**. It contains
-data formatting, the one-step network, hyperparameter search, and forecast export.
-Each example uses `n` consecutive observations from one series to predict its next
-value. Examples never cross series boundaries. Each window and its target share
-normalisation constants computed solely from that input window.
+Both models see the same residuals. For each history:
 
-Hyperparameters are selected using expanding chronological folds. Defaults are
-three forecast origins, six months apart, and seeds 0, 1, and 2. Each fold trains
-on observations before its origin, then predicts the next 18 values recursively.
-The validation blocks overlap, so scores across folds are correlated. All
-candidates see the same series and forecast origins.
+1. Divide by multiplicative seasonal indices from a 2×12 centred moving average (as
+   M3's Naive2).
+2. Subtract a least-squares line fitted to the deseasonalised series.
+3. Z-score the remainder with that series' mean and standard deviation.
 
-For a series with L training observations, default origins are L-30, L-24, and
-L-18. The competition holdout is excluded from all folds. A previous fold's
-validation observations can become observed history in a later fold, but each
-fold's model is initialised and fitted from scratch.
+Every statistic is fitted only on the observations available at the forecast origin.
+Forecast residuals are mapped back by undoing the three steps, with the line and
+seasonal indices extended into the future. `--no-seasonality` and `--no-trend` switch
+steps 1 and 2 off. Negative forecasts are not clipped.
 
-The default window grid uses multiples of 6 up to the largest size that leaves at
-least one fitting example in the earliest fold of every series. For this dataset
-that is **6, 12, and 18**. The grid also searches hidden layers `(32,)`, `(64,)`,
-and `(64, 64)`, with learning rates 0.0003 and 0.001: 18 configurations and 162
-training runs across folds and seeds.
+## Validation
 
-Training gradients use one-step normalised MSE. **Both checkpoint selection and
-hyperparameter ranking use recursive 18-step sMAPE on the original scale.**
-Early stopping returns each run's best recursive validation checkpoint. Candidate
-scores average these best scores across folds and seeds; reported standard
-deviations describe variation across those runs, not confidence intervals. These
-are model-selection scores, not an independent estimate of final performance.
+Both models are tuned on the same three expanding chronological folds
+(`FOLDS = 3`, `FOLD_STEP = 6` in `models/evaluation.py`). For a series with L training
+observations, the forecast origins are L-30, L-24, and L-18; each fold refits the
+decomposition and model on observations before its origin and forecasts the next 18
+recursively. The validation blocks overlap, so fold scores are correlated. The
+competition holdout is excluded from all folds.
 
-The winning configuration is retrained from fresh weights on all non-holdout
-observations for the median selected epoch count across its CV runs. The final
-seed is fixed in advance (default 0), not selected using validation scores.
+Configurations are ranked by mean 18-step sMAPE. `--search-results` saves every
+configuration with its mean and standard deviation across runs, sMAPE averaged over
+steps 1–6 and 1–12, and one column per forecast step (`smape_step_1` … `smape_step_18`).
+These are model-selection scores, not an independent estimate of final performance.
 
-During forecasting, each updated input window is normalised again. The predicted
-value is converted back to the original scale, appended to the window, and used
-for the next step. Validation and final prediction use this same procedure and
-never feed in actual future values.
+## Ridge baseline
 
-The command saves 18 predictions per series to `data/predictions/mlp.csv`.
-Columns are `series_id`, `step` (1–18), `month_index`, `date`, and `prediction`.
-Join this file to processed test observations on `series_id` and `month_index`
-for later evaluation. The MLP script calculates no holdout scores.
+One global ridge regression maps `window_size` past residuals to the next one, with an
+unpenalised intercept. It searches window sizes 3, 6, 12, 18 and α from 1e-4 to 1e3
+(one per decade). `--strategy direct` instead fits one multi-output ridge that predicts
+all 18 residuals at once.
 
 ```sh
-python -m models.mlp --search-results search.csv --history loss.csv
-python -m models.mlp --windows 6 12 18 --folds 3 --fold-step 6 --seeds 0 1 2
-python -m models.mlp --folds 1 --windows 6 12 18 24 30
+python -m models.ridge --search-results ridge_search.csv
+python -m models.ridge --strategy direct --no-trend
 ```
 
-Use `--predictions` to choose the forecast CSV destination. `--search-results`
-saves one row per configuration with mean CV score, standard deviation, median
-epoch count, and run count. `--history` saves the winning configuration's epoch
-curves, identified by fold and seed. `--seed` sets the final retraining seed;
-`--seeds` sets the CV seeds. Larger explicit windows are rejected if any series
-cannot provide a fitting example in the earliest fold.
+Forecasts are saved to `data/predictions/ridge_<strategy>.csv`.
 
-For use in Python:
+## MLP
 
-```python
-from models.mlp import load_data, prepare_windows, train_mlp, search_hyperparameters, predict
+One global network with a single tanh hidden layer maps `window` past residuals to the
+next one; forecasts are recursive. Training minimises one-step MSE with Adam, gradient
+clipping at norm 1, batch size 512, and weight decay on all weights and biases.
+Early stopping (patience 15) keeps the checkpoint with the best recursive 18-step
+validation sMAPE; the same folds score the configuration, so CV scores are slightly
+optimistic.
 
-series = load_data()
-best, results, losses = search_hyperparameters(series)
-histories = list(series.values())
-arrays = prepare_windows(histories, window=best["window"])
-model, _ = train_mlp(arrays, window=best["window"], epochs=best["best_epoch"],
-                     hidden=best["hidden"], lr=best["lr"], seed=0)
-forecast = predict(model, histories, steps=18)  # rows follow series.keys()
+The default grid is windows 3, 6, 12, 18; hidden units 1–5; weight decay 0, 1e-4,
+1e-3, 1e-2; learning rates 3e-4 and 1e-3: 160 configurations, each trained on three
+folds. The winner is retrained from fresh weights on all training observations for
+the median selected epoch count, with a fixed seed (default 42).
+
+```sh
+python -m models.mlp --search-results mlp_search.csv --history loss.csv
+python -m models.mlp --windows 3 6 --hidden-sizes 2 4 --weight-decays 0 1e-3
 ```
 
-Keep the competition test set for final evaluation and tune using chronological
-validation within training data. Values remain on the historical competition
-scale; these are benchmark series rather than current market feeds.
+`--history` saves the winning configuration's epoch curves by fold and seed;
+`--seeds` sets the CV seeds and `--seed` the final retraining seed. Forecasts are
+saved to `data/predictions/mlp.csv`.
+
+## Output
+
+Prediction files have columns `series_id`, `step` (1–18), `month_index`, `date`, and
+`prediction`. Join them to the processed test observations on `series_id` and
+`month_index` for evaluation. Neither script calculates holdout scores.
 
 Dataset: Makridakis, S. and Hibon, M. (2000). The M3-Competition: results,
 conclusions and implications. International Journal of Forecasting, 16(4), 451–476.
