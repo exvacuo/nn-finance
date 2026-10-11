@@ -104,7 +104,7 @@ def smape(actual, forecast):
     return float(100 * ratios.mean())
 
 
-def train_mlp(arrays, window, epochs=150, seed=0, hidden=(64, 64), lr=1e-3,
+def train_mlp(arrays, window, epochs=150, seed=42, hidden=(64, 64), lr=1e-3,
               validation=None):
     """Fit one-step targets; choose epochs using recursive 18-step validation sMAPE.
 
@@ -157,7 +157,7 @@ def train_mlp(arrays, window, epochs=150, seed=0, hidden=(64, 64), lr=1e-3,
 def search_hyperparameters(series, windows=None,
                            hidden_sizes=((32,), (64,), (64, 64)),
                            learning_rates=(3e-4, 1e-3), epochs=150,
-                           seeds=(0, 1, 2), folds=3, fold_step=6):
+                           seeds=(42,), folds=3, fold_step=6):
     """Rank configurations by mean recursive validation sMAPE across folds and seeds."""
     validation_folds = make_folds(series, folds, fold_step)
     maximum = min(len(values) for values in validation_folds[0][0]) - 1
@@ -205,17 +205,16 @@ def main():
     parser.add_argument("--learning-rates", type=float, nargs="+", default=[3e-4, 1e-3])
     parser.add_argument("--folds", type=int, default=3)
     parser.add_argument("--fold-step", type=int, default=6, help="Months between forecast origins")
-    parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2], help="Seeds for CV")
-    parser.add_argument("--seed", type=int, default=0, help="Fixed seed for final retraining")
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42], help="Seeds for CV")
+    parser.add_argument("--seed", type=int, default=42, help="Fixed seed for final retraining")
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--predictions", type=Path, default=ROOT / "data" / "predictions" / "mlp.csv")
-    parser.add_argument("--search-results", type=Path, help="Optional CSV of candidate CV scores")
     parser.add_argument("--history", type=Path, help="Optional winning configuration's fold/seed loss curves")
     args = parser.parse_args()
     try:
         series = load_data(args.input)
         hidden_sizes = [tuple(int(size) for size in item.split(",")) for item in args.hidden_sizes]
-        best, results, history = search_hyperparameters(
+        best, _, history = search_hyperparameters(
             series, args.windows, hidden_sizes, args.learning_rates, args.epochs,
             args.seeds, args.folds, args.fold_step)
         # Fresh final training uses all non-holdout observations and the median CV epoch count.
@@ -244,10 +243,9 @@ def main():
     args.predictions.parent.mkdir(parents=True, exist_ok=True)
     predictions.to_csv(args.predictions, index=False, date_format="%Y-%m-%d")
     print(f"Saved {len(predictions):,} predictions to {args.predictions}")
-    for output, frame in [(args.search_results, results), (args.history, history)]:
-        if output:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            frame.to_csv(output, index=False)
+    if args.history:
+        args.history.parent.mkdir(parents=True, exist_ok=True)
+        history.to_csv(args.history, index=False)
 
 
 if __name__ == "__main__":
