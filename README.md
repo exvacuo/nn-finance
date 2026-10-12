@@ -174,11 +174,7 @@ The evaluator writes these files, replacing the previous evaluation on each run:
 - `per_forecast.csv`: aligned actuals, forecasts, errors, ranks, and reference errors.
 - `metadata.json`: source paths and hashes, ranked model names, benchmark, and metric conventions.
 
-Generated evaluation files are ignored by Git. Run the evaluator checks with:
-
-```sh
-python -m unittest discover -s tests -v
-```
+Generated evaluation files are ignored by Git.
 
 Dataset: Makridakis, S. and Hibon, M. (2000). The M3-Competition: results,
 conclusions and implications. International Journal of Forecasting, 16(4), 451–476.
