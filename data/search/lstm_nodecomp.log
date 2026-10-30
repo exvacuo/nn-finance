@@ -1,0 +1,52 @@
+Searching windows [3, 6, 12, 18], hidden [2, 4, 8], weight decays [0.0, 0.001], learning rates [0.0003, 0.001]; 3 folds, 1 seeds, seasonality=False, trend=False, 145 series
+window=3, hidden=2, weight_decay=0, lr=0.0003: recursive CV sMAPE=27.400% (SD 1.251), epochs=1
+window=3, hidden=2, weight_decay=0, lr=0.001: recursive CV sMAPE=17.156% (SD 0.429), epochs=146
+window=3, hidden=2, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=27.400% (SD 1.251), epochs=1
+window=3, hidden=2, weight_decay=0.001, lr=0.001: recursive CV sMAPE=17.252% (SD 0.426), epochs=148
+window=3, hidden=4, weight_decay=0, lr=0.0003: recursive CV sMAPE=17.722% (SD 0.451), epochs=148
+window=3, hidden=4, weight_decay=0, lr=0.001: recursive CV sMAPE=16.290% (SD 0.477), epochs=143
+window=3, hidden=4, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=18.132% (SD 0.498), epochs=148
+window=3, hidden=4, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.576% (SD 0.493), epochs=143
+window=3, hidden=8, weight_decay=0, lr=0.0003: recursive CV sMAPE=17.688% (SD 0.450), epochs=150
+window=3, hidden=8, weight_decay=0, lr=0.001: recursive CV sMAPE=16.354% (SD 0.509), epochs=108
+window=3, hidden=8, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=18.129% (SD 0.604), epochs=150
+window=3, hidden=8, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.379% (SD 0.510), epochs=147
+window=6, hidden=2, weight_decay=0, lr=0.0003: recursive CV sMAPE=27.368% (SD 1.248), epochs=1
+window=6, hidden=2, weight_decay=0, lr=0.001: recursive CV sMAPE=16.433% (SD 0.467), epochs=150
+window=6, hidden=2, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=27.368% (SD 1.248), epochs=1
+window=6, hidden=2, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.570% (SD 0.501), epochs=150
+window=6, hidden=4, weight_decay=0, lr=0.0003: recursive CV sMAPE=17.073% (SD 0.519), epochs=149
+window=6, hidden=4, weight_decay=0, lr=0.001: recursive CV sMAPE=16.111% (SD 0.469), epochs=129
+window=6, hidden=4, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=17.270% (SD 0.520), epochs=149
+window=6, hidden=4, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.132% (SD 0.498), epochs=129
+window=6, hidden=8, weight_decay=0, lr=0.0003: recursive CV sMAPE=16.664% (SD 0.517), epochs=147
+window=6, hidden=8, weight_decay=0, lr=0.001: recursive CV sMAPE=16.349% (SD 0.481), epochs=69
+window=6, hidden=8, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=17.007% (SD 0.535), epochs=149
+window=6, hidden=8, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.348% (SD 0.509), epochs=106
+window=12, hidden=2, weight_decay=0, lr=0.0003: recursive CV sMAPE=27.338% (SD 1.251), epochs=1
+window=12, hidden=2, weight_decay=0, lr=0.001: recursive CV sMAPE=16.312% (SD 0.440), epochs=149
+window=12, hidden=2, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=27.338% (SD 1.251), epochs=1
+window=12, hidden=2, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.762% (SD 0.526), epochs=100
+window=12, hidden=4, weight_decay=0, lr=0.0003: recursive CV sMAPE=17.029% (SD 0.510), epochs=149
+window=12, hidden=4, weight_decay=0, lr=0.001: recursive CV sMAPE=16.206% (SD 0.503), epochs=91
+window=12, hidden=4, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=17.196% (SD 0.525), epochs=150
+window=12, hidden=4, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.091% (SD 0.496), epochs=103
+window=12, hidden=8, weight_decay=0, lr=0.0003: recursive CV sMAPE=16.392% (SD 0.416), epochs=148
+window=12, hidden=8, weight_decay=0, lr=0.001: recursive CV sMAPE=16.227% (SD 0.261), epochs=54
+window=12, hidden=8, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=16.439% (SD 0.470), epochs=146
+window=12, hidden=8, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.257% (SD 0.497), epochs=85
+window=18, hidden=2, weight_decay=0, lr=0.0003: recursive CV sMAPE=19.410% (SD 0.540), epochs=150
+window=18, hidden=2, weight_decay=0, lr=0.001: recursive CV sMAPE=16.673% (SD 0.526), epochs=94
+window=18, hidden=2, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=19.418% (SD 0.617), epochs=150
+window=18, hidden=2, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.590% (SD 0.468), epochs=107
+window=18, hidden=4, weight_decay=0, lr=0.0003: recursive CV sMAPE=17.404% (SD 0.475), epochs=149
+window=18, hidden=4, weight_decay=0, lr=0.001: recursive CV sMAPE=16.089% (SD 0.564), epochs=83
+window=18, hidden=4, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=17.536% (SD 0.498), epochs=149
+window=18, hidden=4, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.155% (SD 0.488), epochs=97
+window=18, hidden=8, weight_decay=0, lr=0.0003: recursive CV sMAPE=16.318% (SD 0.509), epochs=136
+window=18, hidden=8, weight_decay=0, lr=0.001: recursive CV sMAPE=15.689% (SD 0.379), epochs=75
+window=18, hidden=8, weight_decay=0.001, lr=0.0003: recursive CV sMAPE=16.363% (SD 0.561), epochs=147
+window=18, hidden=8, weight_decay=0.001, lr=0.001: recursive CV sMAPE=16.088% (SD 0.533), epochs=72
+Selected window=18, hidden=8, weight_decay=0, lr=0.001 (CV sMAPE 15.689%; steps 1-6 11.388%, 1-12 13.615%)
+Final model retrained on 12,818 examples for 75 epochs
+Saved 2,610 predictions to data/predictions/lstm_nodecomp.csv
