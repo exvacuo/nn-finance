@@ -1,8 +1,8 @@
 # M3 monthly financial forecasting
 
 Prepare the 145 monthly FINANCE series from the M3 competition, remove seasonality
-and trend, and forecast the 18 withheld months with a ridge regression baseline and
-a small MLP.
+and trend, and forecast the 18 withheld months with a ridge regression baseline, a small MLP
+and a small LSTM.
 
 ## Run
 
@@ -16,6 +16,7 @@ python -m utilities.load_data
 python -m utilities.plot_data
 python -m models.ridge
 python -m models.mlp
+python -m models.lstm
 ```
 
 ## Layout
@@ -29,6 +30,7 @@ python -m models.mlp
 | `models/evaluation.py` | Validation folds, sMAPE (overall and per forecast step), forecast export |
 | `models/ridge.py` | Ridge regression baseline |
 | `models/mlp.py` | One-hidden-layer MLP |
+| `models/lstm.py` | One-layer LSTM |
 
 ## Data
 
@@ -48,7 +50,7 @@ python -m utilities.plot_data --series N2522 N2523 --show
 
 ## Preprocessing
 
-Both models see the same residuals. For each history:
+All models see the same residuals. For each history:
 
 1. Divide by multiplicative seasonal indices from a 2×12 centred moving average (as
    M3's Naive2).
@@ -62,7 +64,7 @@ steps 1 and 2 off. Negative forecasts are not clipped.
 
 ## Validation
 
-Both models are tuned on the same three expanding chronological folds
+All models are tuned on the same three expanding chronological folds
 (`FOLDS = 3`, `FOLD_STEP = 6` in `models/evaluation.py`). For a series with L training
 observations, the forecast origins are L-30, L-24, and L-18; each fold refits the
 decomposition and model on observations before its origin and forecasts the next 18
@@ -111,10 +113,27 @@ python -m models.mlp --windows 3 6 --hidden-sizes 2 4 --weight-decays 0 1e-3
 `--seeds` sets the CV seeds and `--seed` the final retraining seed. Forecasts are
 saved to `data/predictions/mlp.csv`.
 
+## LSTM
+
+One global network with a single LSTM layer reads `window` past residuals, one per
+timestep from a zero state, and a linear head maps its last hidden state to the next
+residual; forecasts are recursive. Training, early stopping, final retraining, seeds
+and flags are the same as the MLP's (`--hidden-sizes` sets the LSTM units).
+
+The default grid is windows 3, 6, 12, 18; hidden units 2, 4, 8; weight decay 0 and
+1e-3; learning rates 3e-4 and 1e-3: 48 configurations, each trained on three folds.
+
+```sh
+python -m models.lstm --search-results lstm_search.csv --history lstm_loss.csv
+python -m models.lstm --windows 6 12 --hidden-sizes 4 --weight-decays 0
+```
+
+Forecasts are saved to `data/predictions/lstm.csv`.
+
 ## Output
 
 Prediction files have columns `series_id`, `step` (1–18), `month_index`, `date`, and
-`prediction`. Neither model script calculates holdout scores.
+`prediction`. No model script calculates holdout scores.
 
 ## Evaluate saved predictions
 
