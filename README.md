@@ -24,6 +24,7 @@ python -m models.mlp
 | --- | --- |
 | `utilities/load_data.py` | Raw M3 sheet → processed CSV; `load_training_data` reads the training histories |
 | `utilities/plot_data.py` | Plot series with the withheld test months highlighted |
+| `utilities/evaluate_predictions.py` | Score saved prediction CSVs against the competition test split |
 | `models/preprocessing.py` | Classical decomposition: seasonality → linear trend → per-series z-score |
 | `models/evaluation.py` | Validation folds, sMAPE (overall and per forecast step), forecast export |
 | `models/ridge.py` | Ridge regression baseline |
@@ -113,8 +114,67 @@ saved to `data/predictions/mlp.csv`.
 ## Output
 
 Prediction files have columns `series_id`, `step` (1–18), `month_index`, `date`, and
-`prediction`. Join them to the processed test observations on `series_id` and
-`month_index` for evaluation. Neither script calculates holdout scores.
+`prediction`. Neither model script calculates holdout scores.
+
+## Evaluate saved predictions
+
+After training and tuning are finished, evaluate all model CSVs in
+`data/predictions/`:
+
+```sh
+python -m utilities.evaluate_predictions
+python -m utilities.evaluate_predictions --benchmark ridge_recursive
+```
+
+The evaluator joins predictions to **test** observations by `series_id` and
+`month_index`, and verifies steps, dates (when supplied), finite predictions,
+and complete coverage of every series and all 18 months. Missing, duplicate,
+unexpected, or training-month predictions fail before any results are written.
+Training observations are used only to calculate the Naive2 reference. The
+competition test scores must not be used for further tuning.
+
+Options include `--input`, `--predictions-dir`, and `--output-dir` (default
+`data/evaluation/`). Model names come from CSV filename stems. The five measures
+are from Makridakis & Hibon (2000), Appendix A, pp. 461–462:
+
+| Column | Definition |
+| --- | --- |
+| `smape` | Mean symmetric absolute percentage error |
+| `median_sape` | Median symmetric APE across series at each horizon |
+| `average_rank` | Mean rank of symmetric APE across evaluated models at each series/horizon; ties receive average ranks |
+| `percentage_better` | Percentage of individual forecasts with smaller absolute error than `--benchmark`; ties are not wins |
+| `median_rae` | Median absolute error divided by Naive2's absolute error, across series at each horizon |
+
+`--benchmark` defaults to `naive2`; unlike the paper's percentage-better tables,
+this default does not use Dampen. RAE always uses Naive2, irrespective of the
+percentage-better benchmark. If `naive2.csv` is present, it supplies the reference;
+otherwise the evaluator generates a training-only classical multiplicative
+Naive2 approximation using the existing seasonal-index code. Histories shorter
+than 24 months or containing nonpositive values fall back to last-value naive.
+This reference is our implementation, not the original competition submission.
+The reference participates in rankings, so ranks depend on the evaluated model set.
+
+By default, sAPE follows the original M3 formula
+`200 * abs(actual - forecast) / (actual + forecast)`. Negative sums can produce
+negative scores. Use `--smape-convention absolute` for the bounded modern formula
+used during model tuning, with `abs(actual) + abs(forecast)` in the denominator.
+Both formulas agree for nonnegative values. A pair of zeros scores zero;
+opposing nonzero values with a zero sum fail in M3 mode. For RAE, zero reference
+error gives undefined `0/0` (excluded from the median) or infinite positive/zero
+error (retained). Undefined medians are empty CSV cells and infinity is `inf`;
+counts are saved so these cases remain visible.
+
+The evaluator writes these files, replacing the previous evaluation on each run:
+
+- `summary.csv`: each model over horizons 1–18, 1–3, 4–12, 13–18, 1–6, and 1–12.
+  These summaries average the per-horizon statistics, including horizon medians;
+  they are not medians of per-series mean errors.
+- `per_horizon.csv`: the five metrics for each of the 18 forecast steps.
+- `per_series.csv`: the five metrics within each series, aggregated over its 18 forecasts.
+- `per_forecast.csv`: aligned actuals, forecasts, errors, ranks, and reference errors.
+- `metadata.json`: source paths and hashes, ranked model names, benchmark, and metric conventions.
+
+Generated evaluation files are ignored by Git.
 
 Dataset: Makridakis, S. and Hibon, M. (2000). The M3-Competition: results,
 conclusions and implications. International Journal of Forecasting, 16(4), 451–476.
