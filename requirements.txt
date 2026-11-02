@@ -4,3 +4,4 @@ matplotlib>=3.8,<4
 xlrd>=2.0.1,<3
 torch>=2.2,<3
 scikit-learn>=1.4,<2
+statsforecast>=2.1,<3
